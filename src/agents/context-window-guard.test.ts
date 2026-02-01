@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { OpenClawConfig } from "../config/config.js";
 import {
+  applyContextWindowCap,
   CONTEXT_WINDOW_HARD_MIN_TOKENS,
   CONTEXT_WINDOW_WARN_BELOW_TOKENS,
   evaluateContextWindowGuard,
@@ -145,5 +146,59 @@ describe("context-window-guard", () => {
   it("exports thresholds as expected", () => {
     expect(CONTEXT_WINDOW_HARD_MIN_TOKENS).toBe(16_000);
     expect(CONTEXT_WINDOW_WARN_BELOW_TOKENS).toBe(32_000);
+  });
+});
+
+describe("applyContextWindowCap", () => {
+  it("caps model contextWindow when info.tokens is smaller", () => {
+    const model = { id: "test", contextWindow: 200_000, provider: "anthropic" };
+    const info = { tokens: 32_000, source: "agentContextTokens" as const };
+    const result = applyContextWindowCap(model, info);
+    expect(result.contextWindow).toBe(32_000);
+    expect(result.id).toBe("test");
+    expect(result.provider).toBe("anthropic");
+    // Should be a new object, not mutating original
+    expect(result).not.toBe(model);
+    expect(model.contextWindow).toBe(200_000);
+  });
+
+  it("returns model unchanged when info.tokens >= model.contextWindow", () => {
+    const model = { id: "test", contextWindow: 64_000, provider: "openai" };
+    const info = { tokens: 128_000, source: "default" as const };
+    const result = applyContextWindowCap(model, info);
+    expect(result).toBe(model); // Same reference
+    expect(result.contextWindow).toBe(64_000);
+  });
+
+  it("returns model unchanged when info.tokens equals model.contextWindow", () => {
+    const model = { id: "test", contextWindow: 64_000, provider: "openai" };
+    const info = { tokens: 64_000, source: "model" as const };
+    const result = applyContextWindowCap(model, info);
+    expect(result).toBe(model);
+  });
+
+  it("handles model with undefined contextWindow", () => {
+    const model = { id: "test", provider: "custom", contextWindow: undefined };
+    const info = { tokens: 32_000, source: "agentContextTokens" as const };
+    const result = applyContextWindowCap(model, info);
+    expect(result.contextWindow).toBe(32_000);
+    expect(result).not.toBe(model);
+  });
+
+  it("preserves all model properties when capping", () => {
+    const model = {
+      id: "claude-4",
+      contextWindow: 200_000,
+      provider: "anthropic",
+      api: "anthropic" as const,
+      maxTokens: 8192,
+      reasoning: true,
+    };
+    const info = { tokens: 50_000, source: "agentContextTokens" as const };
+    const result = applyContextWindowCap(model, info);
+    expect(result).toEqual({
+      ...model,
+      contextWindow: 50_000,
+    });
   });
 });

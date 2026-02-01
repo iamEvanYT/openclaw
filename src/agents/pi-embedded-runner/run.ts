@@ -13,6 +13,7 @@ import {
   markAuthProfileUsed,
 } from "../auth-profiles.js";
 import {
+  applyContextWindowCap,
   CONTEXT_WINDOW_HARD_MIN_TOKENS,
   CONTEXT_WINDOW_WARN_BELOW_TOKENS,
   evaluateContextWindowGuard,
@@ -136,6 +137,10 @@ export async function runEmbeddedPiAgent(
           { reason: "unknown", provider, model: modelId },
         );
       }
+
+      // Apply context window cap from agents.defaults.contextTokens to the model
+      // so the SDK triggers compaction at the configured threshold
+      const effectiveModel = applyContextWindowCap(model, ctxInfo);
 
       const authStore = ensureAuthProfileStore(agentDir, { allowKeychainPrompt: false });
       const preferredProfileId = params.authProfileId?.trim();
@@ -338,7 +343,7 @@ export async function runEmbeddedPiAgent(
             disableTools: params.disableTools,
             provider,
             modelId,
-            model,
+            model: effectiveModel,
             authStorage,
             modelRegistry,
             thinkLevel,
