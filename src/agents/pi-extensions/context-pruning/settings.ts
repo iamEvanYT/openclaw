@@ -6,6 +6,18 @@ export type ContextPruningToolMatch = {
 };
 export type ContextPruningMode = "off" | "cache-ttl";
 
+/**
+ * Configuration for browser snapshot expiration.
+ * Browser snapshots are large DOM tree outputs that can accumulate in the context window.
+ * This feature automatically expires them after N tool calls to save tokens.
+ */
+export type BrowserSnapshotExpiryConfig = {
+  /** Whether browser snapshot expiration is enabled. Default: true */
+  enabled?: boolean;
+  /** Number of tool calls (or user messages) after which a snapshot expires. Default: 3 */
+  toolCalls?: number;
+};
+
 export type ContextPruningConfig = {
   mode?: ContextPruningMode;
   /** TTL to consider cache expired (duration string, default unit: minutes). */
@@ -23,6 +35,10 @@ export type ContextPruningConfig = {
   hardClear?: {
     enabled?: boolean;
     placeholder?: string;
+  };
+  /** Browser snapshot expiration settings. Works independently of pruning mode. */
+  browserSnapshot?: {
+    expiry?: BrowserSnapshotExpiryConfig;
   };
 };
 
@@ -43,6 +59,23 @@ export type EffectiveContextPruningSettings = {
     enabled: boolean;
     placeholder: string;
   };
+};
+
+/**
+ * Effective settings for browser snapshot expiration.
+ * This is separate from EffectiveContextPruningSettings because it works independently.
+ */
+export type EffectiveBrowserSnapshotExpirySettings = {
+  enabled: boolean;
+  toolCalls: number;
+};
+
+/** Static placeholder for expired browser snapshots. Must remain constant for prompt caching. */
+export const BROWSER_SNAPSHOT_EXPIRED_PLACEHOLDER = "[Browser snapshot expired - content cleared]";
+
+export const DEFAULT_BROWSER_SNAPSHOT_EXPIRY_SETTINGS: EffectiveBrowserSnapshotExpirySettings = {
+  enabled: true,
+  toolCalls: 3,
 };
 
 export const DEFAULT_CONTEXT_PRUNING_SETTINGS: EffectiveContextPruningSettings = {
@@ -120,4 +153,35 @@ export function computeEffectiveSettings(raw: unknown): EffectiveContextPruningS
   }
 
   return s;
+}
+
+/**
+ * Compute effective browser snapshot expiry settings from raw config.
+ * Returns settings even if contextPruning mode is "off" since this feature works independently.
+ */
+export function computeBrowserSnapshotExpirySettings(
+  raw: unknown,
+): EffectiveBrowserSnapshotExpirySettings {
+  const defaults = structuredClone(DEFAULT_BROWSER_SNAPSHOT_EXPIRY_SETTINGS);
+
+  if (!raw || typeof raw !== "object") {
+    return defaults;
+  }
+
+  const cfg = raw as ContextPruningConfig;
+  const expiryCfg = cfg.browserSnapshot?.expiry;
+
+  if (!expiryCfg || typeof expiryCfg !== "object") {
+    return defaults;
+  }
+
+  if (typeof expiryCfg.enabled === "boolean") {
+    defaults.enabled = expiryCfg.enabled;
+  }
+
+  if (typeof expiryCfg.toolCalls === "number" && Number.isFinite(expiryCfg.toolCalls)) {
+    defaults.toolCalls = Math.max(1, Math.floor(expiryCfg.toolCalls));
+  }
+
+  return defaults;
 }

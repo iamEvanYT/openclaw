@@ -83,6 +83,18 @@ export const AgentDefaultsSchema = z
           })
           .strict()
           .optional(),
+        browserSnapshot: z
+          .object({
+            expiry: z
+              .object({
+                enabled: z.boolean().optional(),
+                toolCalls: z.number().int().positive().optional(),
+              })
+              .strict()
+              .optional(),
+          })
+          .strict()
+          .optional(),
       })
       .strict()
       .optional(),
