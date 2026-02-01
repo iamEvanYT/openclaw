@@ -31,6 +31,8 @@ import { listChannelSupportedActions, resolveChannelMessageToolHints } from "../
 import { formatUserTime, resolveUserTimeFormat, resolveUserTimezone } from "../date-time.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../defaults.js";
 import { resolveOpenClawDocsPath } from "../docs-path.js";
+import { applyContextWindowCap, resolveContextWindowInfo } from "../context-window-guard.js";
+import { DEFAULT_CONTEXT_TOKENS } from "../defaults.js";
 import { getApiKeyForModel, resolveModelAuthMode } from "../model-auth.js";
 import { ensureOpenClawModelsJson } from "../models-config.js";
 import {
@@ -273,6 +275,18 @@ export async function compactEmbeddedPiSessionDirect(
       reason,
     };
   }
+
+  // Apply context window cap from agents.defaults.contextTokens to the model
+  // so the SDK triggers compaction at the configured threshold
+  const ctxInfo = resolveContextWindowInfo({
+    cfg: params.config,
+    provider,
+    modelId,
+    modelContextWindow: model.contextWindow,
+    defaultTokens: DEFAULT_CONTEXT_TOKENS,
+  });
+  const effectiveModel = applyContextWindowCap(model, ctxInfo);
+
   try {
     const apiKeyInfo = await getApiKeyForModel({
       model,
@@ -535,7 +549,7 @@ export async function compactEmbeddedPiSessionDirect(
         sessionManager,
         provider,
         modelId,
-        model,
+        model: effectiveModel,
       });
 
       const { builtInTools, customTools } = splitSdkTools({
@@ -548,7 +562,7 @@ export async function compactEmbeddedPiSessionDirect(
         agentDir,
         authStorage,
         modelRegistry,
-        model,
+        model: effectiveModel,
         thinkingLevel: mapThinkingLevel(params.thinkLevel),
         tools: builtInTools,
         customTools,
