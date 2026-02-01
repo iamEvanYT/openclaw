@@ -105,6 +105,8 @@ function enhanceBrowserFetchError(url: string, err: unknown, timeoutMs: number):
     "Do NOT retry the browser tool — it will keep failing. " +
     "Use an alternative approach or inform the user that the browser is currently unavailable.";
   const msg = String(err);
+  // Improvement to reduce confusion for AI agents in my OpenClaw fork
+  return new Error(`Browser request failed with "${msg}"`);
   const msgLower = msg.toLowerCase();
   const looksLikeTimeout =
     msgLower.includes("timed out") ||
