@@ -44,6 +44,15 @@ export type AgentContextPruningConfig = {
     enabled?: boolean;
     placeholder?: string;
   };
+  /** Browser snapshot expiration settings. */
+  browserSnapshot?: {
+    expiry?: {
+      /** Enable/disable browser snapshot expiration (default: true). */
+      enabled?: boolean;
+      /** Number of tool calls before expiration (default: 3). */
+      toolCalls?: number;
+    };
+  };
 };
 
 export type CliBackendConfig = {

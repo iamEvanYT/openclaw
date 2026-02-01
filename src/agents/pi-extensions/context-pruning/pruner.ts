@@ -2,8 +2,13 @@ import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { ImageContent, TextContent, ToolResultMessage } from "@mariozechner/pi-ai";
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 
-import type { EffectiveContextPruningSettings } from "./settings.js";
-import { makeToolPrunablePredicate } from "./tools.js";
+import { log } from "./logger.js";
+import type { BrowserSnapshotExpiryRuntimeValue } from "./runtime.js";
+import {
+  BROWSER_SNAPSHOT_EXPIRED_PLACEHOLDER,
+  type EffectiveContextPruningSettings,
+} from "./settings.js";
+import { isBrowserSnapshotToolResult, makeToolPrunablePredicate } from "./tools.js";
 
 const CHARS_PER_TOKEN_ESTIMATE = 4;
 // We currently skip pruning tool results that contain images. Still, we count them (approx.) so
@@ -341,6 +346,156 @@ export function pruneContextMessages(params: {
     const afterChars = estimateMessageChars(cleared as unknown as AgentMessage);
     totalChars += afterChars - beforeChars;
     ratio = totalChars / charWindow;
+  }
+
+  return next ?? messages;
+}
+
+/**
+ * Expire browser snapshots that have exceeded the tool call threshold,
+ * or when a new browser snapshot is taken (which immediately expires all older ones).
+ *
+ * This function:
+ * 1. Scans messages for new browser snapshots
+ * 2. If a new snapshot is found, expires all existing tracked snapshots immediately
+ * 3. If multiple new snapshots are found, only keeps the last one
+ * 4. Detects new tool calls and user messages to increment counters
+ * 5. Replaces expired snapshot content with a static placeholder
+ *
+ * @returns The modified messages array (or original if no changes)
+ */
+export function expireBrowserSnapshots(params: {
+  messages: AgentMessage[];
+  runtime: BrowserSnapshotExpiryRuntimeValue;
+}): AgentMessage[] {
+  const { messages, runtime } = params;
+
+  if (!runtime.settings.enabled) {
+    return messages;
+  }
+
+  // Count current tool results and user messages
+  let currentToolResultCount = 0;
+  let currentUserMessageCount = 0;
+  for (const msg of messages) {
+    if (msg.role === "toolResult") {
+      currentToolResultCount++;
+    } else if (msg.role === "user") {
+      currentUserMessageCount++;
+    }
+  }
+
+  // Detect new tool calls or user messages since last check
+  const newToolCalls = Math.max(0, currentToolResultCount - runtime.lastToolResultCount);
+  const newUserMessages = Math.max(0, currentUserMessageCount - runtime.lastUserMessageCount);
+  const incrementCount = newToolCalls + newUserMessages;
+
+  // Update counts for next time
+  runtime.lastToolResultCount = currentToolResultCount;
+  runtime.lastUserMessageCount = currentUserMessageCount;
+
+  // Increment counters for all tracked snapshots
+  if (incrementCount > 0) {
+    for (const entry of runtime.tracker.values()) {
+      entry.callsSince += incrementCount;
+    }
+  }
+
+  // Scan for new browser snapshots in order
+  // If we find a new snapshot, expire all existing tracked snapshots immediately
+  // If multiple new snapshots exist, only the last one survives
+  const newSnapshotIds: string[] = [];
+  for (const msg of messages) {
+    if (msg.role !== "toolResult") {
+      continue;
+    }
+    const toolCallId = msg.toolCallId;
+    if (!toolCallId) {
+      continue;
+    }
+    // Skip if already tracking or already expired
+    if (runtime.tracker.has(toolCallId) || runtime.expiredIds.has(toolCallId)) {
+      continue;
+    }
+    // Check if this is a browser snapshot
+    if (isBrowserSnapshotToolResult(msg, messages)) {
+      newSnapshotIds.push(toolCallId);
+    }
+  }
+
+  // If new snapshots were found, expire all existing tracked snapshots
+  if (newSnapshotIds.length > 0 && runtime.tracker.size > 0) {
+    for (const entry of runtime.tracker.values()) {
+      // Force expire by setting callsSince to threshold
+      entry.callsSince = runtime.settings.toolCalls;
+    }
+  }
+
+  // If multiple new snapshots found, only keep the last one (expire the rest)
+  // Register only the last snapshot; mark all earlier ones as needing expiration
+  const snapshotsToExpire: string[] = [];
+  if (newSnapshotIds.length > 1) {
+    // All but the last are immediately expired
+    for (let i = 0; i < newSnapshotIds.length - 1; i++) {
+      snapshotsToExpire.push(newSnapshotIds[i]);
+    }
+  }
+
+  // Register only the last new snapshot (if any)
+  if (newSnapshotIds.length > 0) {
+    const lastSnapshotId = newSnapshotIds[newSnapshotIds.length - 1];
+    runtime.tracker.set(lastSnapshotId, {
+      toolCallId: lastSnapshotId,
+      callsSince: 0,
+    });
+  }
+
+  // Find expired snapshots (by threshold OR forced by new snapshot)
+  const expiredIds: string[] = [...snapshotsToExpire];
+  const threshold = runtime.settings.toolCalls;
+
+  for (const entry of runtime.tracker.values()) {
+    if (entry.callsSince >= threshold) {
+      expiredIds.push(entry.toolCallId);
+    }
+  }
+
+  if (expiredIds.length === 0) {
+    return messages;
+  }
+
+  // Log once when snapshots expire
+  log.info("browser snapshot expired", { count: expiredIds.length });
+
+  // Create a set for O(1) lookup
+  const expiredSet = new Set(expiredIds);
+
+  // Replace expired snapshot content with placeholder
+  let next: AgentMessage[] | null = null;
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
+    if (msg.role !== "toolResult") {
+      continue;
+    }
+    const toolCallId = msg.toolCallId;
+    if (!toolCallId || !expiredSet.has(toolCallId)) {
+      continue;
+    }
+
+    // Replace content with static placeholder
+    const expired: ToolResultMessage = {
+      ...msg,
+      content: [asText(BROWSER_SNAPSHOT_EXPIRED_PLACEHOLDER)],
+    };
+
+    if (!next) {
+      next = messages.slice();
+    }
+    next[i] = expired as unknown as AgentMessage;
+
+    // Mark as expired and remove from active tracking
+    runtime.tracker.delete(toolCallId);
+    runtime.expiredIds.add(toolCallId);
   }
 
   return next ?? messages;
