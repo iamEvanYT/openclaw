@@ -56,6 +56,11 @@ function buildContextPruningExtension(params: {
   // Initialize it unless explicitly disabled via config.
   const browserSnapshotSettings = computeBrowserSnapshotExpirySettings(raw);
 
+  log.debug("browser snapshot settings computed", {
+    enabled: browserSnapshotSettings.enabled,
+    toolCalls: browserSnapshotSettings.toolCalls,
+  });
+
   if (browserSnapshotSettings.enabled) {
     // Load persisted expired IDs from session to survive restarts
     const persistedExpiredIds = readBrowserSnapshotExpiredIds(params.sessionManager);
@@ -71,25 +76,38 @@ function buildContextPruningExtension(params: {
       lastToolResultCount: 0,
       lastUserMessageCount: 0,
     });
+    log.debug("browser snapshot runtime initialized", {
+      expiredCount: persistedExpiredIds.size,
+    });
+  } else {
+    log.debug("browser snapshot expiration disabled");
   }
 
   // Context pruning requires mode to be "cache-ttl" and an eligible provider
+  const extensionPath = resolvePiExtensionPath("context-pruning");
+
   if (raw?.mode !== "cache-ttl") {
     // Still need the extension for browser snapshot expiration if enabled
     if (browserSnapshotSettings.enabled) {
+      log.debug("returning extension path for browser snapshot only", { extensionPath });
       return {
-        additionalExtensionPaths: [resolvePiExtensionPath("context-pruning")],
+        additionalExtensionPaths: [extensionPath],
       };
     }
+    log.debug("context pruning not enabled (mode is not cache-ttl)");
     return {};
   }
   if (!isCacheTtlEligibleProvider(params.provider, params.modelId)) {
     // Still need the extension for browser snapshot expiration if enabled
     if (browserSnapshotSettings.enabled) {
+      log.debug("returning extension path for browser snapshot only (ineligible provider)", {
+        extensionPath,
+      });
       return {
-        additionalExtensionPaths: [resolvePiExtensionPath("context-pruning")],
+        additionalExtensionPaths: [extensionPath],
       };
     }
+    log.debug("context pruning not enabled (ineligible provider)");
     return {};
   }
 
@@ -97,10 +115,14 @@ function buildContextPruningExtension(params: {
   if (!settings) {
     // Still need the extension for browser snapshot expiration if enabled
     if (browserSnapshotSettings.enabled) {
+      log.debug("returning extension path for browser snapshot only (no effective settings)", {
+        extensionPath,
+      });
       return {
-        additionalExtensionPaths: [resolvePiExtensionPath("context-pruning")],
+        additionalExtensionPaths: [extensionPath],
       };
     }
+    log.debug("context pruning not enabled (no effective settings)");
     return {};
   }
 
@@ -111,8 +133,9 @@ function buildContextPruningExtension(params: {
     lastCacheTouchAt: readLastCacheTtlTimestamp(params.sessionManager),
   });
 
+  log.debug("returning extension path with full context pruning", { extensionPath });
   return {
-    additionalExtensionPaths: [resolvePiExtensionPath("context-pruning")],
+    additionalExtensionPaths: [extensionPath],
   };
 }
 
