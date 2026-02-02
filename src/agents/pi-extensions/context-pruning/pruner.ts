@@ -369,8 +369,18 @@ export function expireBrowserSnapshots(params: {
   const { messages, runtime } = params;
 
   if (!runtime.settings.enabled) {
+    log.debug("browser snapshot expiration disabled");
     return messages;
   }
+
+  log.debug("expireBrowserSnapshots called", {
+    messageCount: messages.length,
+    threshold: runtime.settings.toolCalls,
+    trackedCount: runtime.tracker.size,
+    expiredCount: runtime.expiredIds.size,
+    lastToolResultCount: runtime.lastToolResultCount,
+    lastUserMessageCount: runtime.lastUserMessageCount,
+  });
 
   // Count current tool results and user messages
   let currentToolResultCount = 0;
@@ -388,6 +398,14 @@ export function expireBrowserSnapshots(params: {
   const newUserMessages = Math.max(0, currentUserMessageCount - runtime.lastUserMessageCount);
   const incrementCount = newToolCalls + newUserMessages;
 
+  log.debug("detected new activity", {
+    newToolCalls,
+    newUserMessages,
+    incrementCount,
+    currentToolResultCount,
+    currentUserMessageCount,
+  });
+
   // Update counts for next time
   runtime.lastToolResultCount = currentToolResultCount;
   runtime.lastUserMessageCount = currentUserMessageCount;
@@ -396,6 +414,10 @@ export function expireBrowserSnapshots(params: {
   if (incrementCount > 0) {
     for (const entry of runtime.tracker.values()) {
       entry.callsSince += incrementCount;
+      log.debug("incremented snapshot counter", {
+        toolCallId: entry.toolCallId,
+        callsSince: entry.callsSince,
+      });
     }
   }
 
@@ -413,19 +435,31 @@ export function expireBrowserSnapshots(params: {
     }
     // Skip if already tracking or already expired
     if (runtime.tracker.has(toolCallId) || runtime.expiredIds.has(toolCallId)) {
+      log.debug("skipping snapshot (already tracked or expired)", { toolCallId });
       continue;
     }
     // Check if this is a browser snapshot
     if (isBrowserSnapshotToolResult(msg, messages)) {
+      log.debug("found new browser snapshot", { toolCallId });
       newSnapshotIds.push(toolCallId);
     }
   }
 
+  log.debug("scan complete", {
+    newSnapshotsFound: newSnapshotIds.length,
+    newSnapshotIds,
+  });
+
   // If new snapshots were found, expire all existing tracked snapshots
   if (newSnapshotIds.length > 0 && runtime.tracker.size > 0) {
+    log.debug("expiring old snapshots due to new snapshot");
     for (const entry of runtime.tracker.values()) {
       // Force expire by setting callsSince to threshold
       entry.callsSince = runtime.settings.toolCalls;
+      log.debug("forced expire on old snapshot", {
+        toolCallId: entry.toolCallId,
+        callsSince: entry.callsSince,
+      });
     }
   }
 
@@ -436,6 +470,9 @@ export function expireBrowserSnapshots(params: {
     // All but the last are immediately expired
     for (let i = 0; i < newSnapshotIds.length - 1; i++) {
       snapshotsToExpire.push(newSnapshotIds[i]);
+      log.debug("queuing intermediate snapshot for expiration", {
+        toolCallId: newSnapshotIds[i],
+      });
     }
   }
 
@@ -446,24 +483,40 @@ export function expireBrowserSnapshots(params: {
       toolCallId: lastSnapshotId,
       callsSince: 0,
     });
+    log.debug("registered new snapshot for tracking", {
+      toolCallId: lastSnapshotId,
+      callsSince: 0,
+    });
   }
 
   // Find expired snapshots (by threshold OR forced by new snapshot)
   const expiredIds: string[] = [...snapshotsToExpire];
   const threshold = runtime.settings.toolCalls;
 
+  log.debug("checking for expired snapshots", {
+    threshold,
+    trackedCount: runtime.tracker.size,
+    snapshotsToExpireCount: snapshotsToExpire.length,
+  });
+
   for (const entry of runtime.tracker.values()) {
     if (entry.callsSince >= threshold) {
+      log.debug("snapshot reached expiration threshold", {
+        toolCallId: entry.toolCallId,
+        callsSince: entry.callsSince,
+        threshold,
+      });
       expiredIds.push(entry.toolCallId);
     }
   }
 
   if (expiredIds.length === 0) {
+    log.debug("no snapshots to expire");
     return messages;
   }
 
   // Log once when snapshots expire
-  log.info("browser snapshot expired", { count: expiredIds.length });
+  log.info("browser snapshot expired", { count: expiredIds.length, expiredIds });
 
   // Create a set for O(1) lookup
   const expiredSet = new Set(expiredIds);
