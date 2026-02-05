@@ -26,6 +26,7 @@ export type MemoryFlushSettings = {
   prompt: string;
   systemPrompt: string;
   reserveTokensFloor: number;
+  alwaysExecute: boolean;
 };
 
 const normalizeNonNegativeInt = (value: unknown): number | null => {
@@ -56,6 +57,7 @@ export function resolveMemoryFlushSettings(cfg?: OpenClawConfig): MemoryFlushSet
     prompt: ensureNoReplyHint(prompt),
     systemPrompt: ensureNoReplyHint(systemPrompt),
     reserveTokensFloor,
+    alwaysExecute: defaults?.alwaysExecute ?? false,
   };
 }
 
