@@ -41,6 +41,24 @@ describe("memory flush settings", () => {
     expect(settings?.prompt).toContain("NO_REPLY");
     expect(settings?.systemPrompt).toContain("NO_REPLY");
   });
+
+  it("defaults alwaysExecute to false", () => {
+    const settings = resolveMemoryFlushSettings();
+    expect(settings?.alwaysExecute).toBe(false);
+  });
+
+  it("respects alwaysExecute when set to true", () => {
+    const settings = resolveMemoryFlushSettings({
+      agents: {
+        defaults: {
+          compaction: {
+            memoryFlush: { alwaysExecute: true },
+          },
+        },
+      },
+    });
+    expect(settings?.alwaysExecute).toBe(true);
+  });
 });
 
 describe("shouldRunMemoryFlush", () => {

@@ -1945,6 +1945,7 @@ Legacy defaults:
 - `memoryFlush.enabled`: `true`
 - `memoryFlush.softThresholdTokens`: `4000`
 - `memoryFlush.prompt` / `memoryFlush.systemPrompt`: built-in defaults with `NO_REPLY`
+- `memoryFlush.alwaysExecute`: `false` (when `true`, also runs before manual `/compact`)
 - Note: memory flush is skipped when the session workspace is read-only
   (`agents.defaults.sandbox.workspaceAccess: "ro"` or `"none"`).
 
@@ -1960,6 +1961,7 @@ Example (tuned):
         memoryFlush: {
           enabled: true,
           softThresholdTokens: 6000,
+          alwaysExecute: true, // also run before manual /compact
           systemPrompt: "Session nearing compaction. Store durable memories now.",
           prompt: "Write any lasting notes to memory/YYYY-MM-DD.md; reply with NO_REPLY if nothing to store.",
         },
