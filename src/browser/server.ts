@@ -160,7 +160,10 @@ export async function startBrowserControlServerFromConfig(): Promise<BrowserServ
     if (!profile || profile.driver !== "extension") {
       continue;
     }
-    await ensureChromeExtensionRelayServer({ cdpUrl: profile.cdpUrl }).catch((err) => {
+    await ensureChromeExtensionRelayServer({
+      cdpUrl: profile.cdpUrl,
+      allowRemote: resolved.relayAllowRemote,
+    }).catch((err) => {
       logServer.warn(`Chrome extension relay init failed for profile "${name}": ${String(err)}`);
     });
   }
