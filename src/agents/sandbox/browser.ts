@@ -62,6 +62,8 @@ function buildSandboxBrowserResolvedConfig(params: {
     headless: params.headless,
     noSandbox: false,
     attachOnly: true,
+    relayHost: cdpHost,
+    relayAllowRemote: false,
     defaultProfile: DEFAULT_OPENCLAW_BROWSER_PROFILE_NAME,
     profiles: {
       [DEFAULT_OPENCLAW_BROWSER_PROFILE_NAME]: {
