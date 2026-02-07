@@ -48,6 +48,10 @@ export type BrowserConfig = {
   attachOnly?: boolean;
   /** Default profile to use when profile param is omitted. Default: "chrome" */
   defaultProfile?: string;
+  /** Host/IP to bind the Chrome extension relay server. Default: "127.0.0.1" */
+  relayHost?: string;
+  /** Allow remote connections to the relay (disables loopback checks). Default: false */
+  relayAllowRemote?: boolean;
   /** Named browser profiles with explicit CDP ports or URLs. */
   profiles?: Record<string, BrowserProfileConfig>;
   /** Default snapshot options (applied by the browser tool/CLI when unset). */

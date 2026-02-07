@@ -31,6 +31,8 @@ export type ResolvedBrowserConfig = {
   noSandbox: boolean;
   attachOnly: boolean;
   defaultProfile: string;
+  relayHost: string;
+  relayAllowRemote: boolean;
   profiles: Record<string, BrowserProfileConfig>;
   ssrfPolicy?: SsrFPolicy;
   extraArgs: string[];
@@ -147,6 +149,7 @@ function ensureDefaultProfile(
 function ensureDefaultChromeExtensionProfile(
   profiles: Record<string, BrowserProfileConfig>,
   controlPort: number,
+  relayHost: string,
 ): Record<string, BrowserProfileConfig> {
   const result = { ...profiles };
   if (result.chrome) {
@@ -163,7 +166,7 @@ function ensureDefaultChromeExtensionProfile(
   }
   result.chrome = {
     driver: "extension",
-    cdpUrl: `http://127.0.0.1:${relayPort}`,
+    cdpUrl: `http://${relayHost}:${relayPort}`,
     color: "#00AA00",
   };
   return result;
@@ -214,6 +217,8 @@ export function resolveBrowserConfig(
   const noSandbox = cfg?.noSandbox === true;
   const attachOnly = cfg?.attachOnly === true;
   const executablePath = cfg?.executablePath?.trim() || undefined;
+  const relayHost = cfg?.relayHost?.trim() || "127.0.0.1";
+  const relayAllowRemote = cfg?.relayAllowRemote === true;
 
   const defaultProfileFromConfig = cfg?.defaultProfile?.trim() || undefined;
   // Use legacy cdpUrl port for backward compatibility when no profiles configured
@@ -221,6 +226,7 @@ export function resolveBrowserConfig(
   const profiles = ensureDefaultChromeExtensionProfile(
     ensureDefaultProfile(cfg?.profiles, defaultColor, legacyCdpPort, derivedCdpRange.start),
     controlPort,
+    relayHost,
   );
   const cdpProtocol = cdpInfo.parsed.protocol === "https:" ? "https" : "http";
   const defaultProfile =
@@ -249,6 +255,8 @@ export function resolveBrowserConfig(
     noSandbox,
     attachOnly,
     defaultProfile,
+    relayHost,
+    relayAllowRemote,
     profiles,
     ssrfPolicy,
     extraArgs,

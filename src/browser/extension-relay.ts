@@ -233,10 +233,14 @@ export function getChromeExtensionRelayAuthHeaders(url: string): Record<string, 
 
 export async function ensureChromeExtensionRelayServer(opts: {
   cdpUrl: string;
+  allowRemote?: boolean;
 }): Promise<ChromeExtensionRelayServer> {
   const info = parseBaseUrl(opts.cdpUrl);
-  if (!isLoopbackHost(info.host)) {
-    throw new Error(`extension relay requires loopback cdpUrl host (got ${info.host})`);
+  const allowRemote = opts.allowRemote === true;
+  if (!allowRemote && !isLoopbackHost(info.host)) {
+    throw new Error(
+      `extension relay requires loopback cdpUrl host (got ${info.host}). Set browser.relayAllowRemote=true to allow non-loopback hosts.`,
+    );
   }
 
   const existing = serversByPort.get(info.port);
@@ -385,33 +389,60 @@ export async function ensureChromeExtensionRelayServer(opts: {
     }
   };
 
+  const relayAuthToken = randomBytes(32).toString("base64url");
+
+  // Build CORS headers for chrome-extension:// origins only (when allowRemote is enabled)
+  const getCorsHeaders = (req: IncomingMessage): Record<string, string> => {
+    if (!allowRemote) {
+      return {};
+    }
+    const origin = headerValue(req.headers.origin);
+    // Only allow chrome-extension:// origins
+    if (origin && origin.startsWith("chrome-extension://")) {
+      return {
+        "Access-Control-Allow-Origin": origin,
+        "Access-Control-Allow-Methods": "GET, PUT, POST, OPTIONS",
+        "Access-Control-Allow-Headers": `Content-Type, ${RELAY_AUTH_HEADER}`,
+      };
+    }
+    return {};
+  };
+
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", info.baseUrl);
     const path = url.pathname;
+    const corsHeaders = getCorsHeaders(req);
+
+    // Handle CORS preflight requests
+    if (allowRemote && req.method === "OPTIONS") {
+      res.writeHead(204, corsHeaders);
+      res.end();
+      return;
+    }
 
     if (path.startsWith("/json")) {
       const token = getHeader(req, RELAY_AUTH_HEADER);
       if (!token || token !== relayAuthToken) {
-        res.writeHead(401);
+        res.writeHead(401, corsHeaders);
         res.end("Unauthorized");
         return;
       }
     }
 
     if (req.method === "HEAD" && path === "/") {
-      res.writeHead(200);
+      res.writeHead(200, corsHeaders);
       res.end();
       return;
     }
 
     if (path === "/") {
-      res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+      res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", ...corsHeaders });
       res.end("OK");
       return;
     }
 
     if (path === "/extension/status") {
-      res.writeHead(200, { "Content-Type": "application/json" });
+      res.writeHead(200, { "Content-Type": "application/json", ...corsHeaders });
       res.end(JSON.stringify({ connected: Boolean(extensionWs) }));
       return;
     }
@@ -432,7 +463,7 @@ export async function ensureChromeExtensionRelayServer(opts: {
       if (extensionWs) {
         payload.webSocketDebuggerUrl = cdpWsUrl;
       }
-      res.writeHead(200, { "Content-Type": "application/json" });
+      res.writeHead(200, { "Content-Type": "application/json", ...corsHeaders });
       res.end(JSON.stringify(payload));
       return;
     }
@@ -448,7 +479,7 @@ export async function ensureChromeExtensionRelayServer(opts: {
         webSocketDebuggerUrl: cdpWsUrl,
         devtoolsFrontendUrl: `/devtools/inspector.html?ws=${cdpWsUrl.replace("ws://", "")}`,
       }));
-      res.writeHead(200, { "Content-Type": "application/json" });
+      res.writeHead(200, { "Content-Type": "application/json", ...corsHeaders });
       res.end(JSON.stringify(list));
       return;
     }
@@ -457,7 +488,7 @@ export async function ensureChromeExtensionRelayServer(opts: {
     if (activateMatch && (req.method === "GET" || req.method === "PUT")) {
       const targetId = decodeURIComponent(activateMatch[1] ?? "").trim();
       if (!targetId) {
-        res.writeHead(400);
+        res.writeHead(400, corsHeaders);
         res.end("targetId required");
         return;
       }
@@ -472,7 +503,7 @@ export async function ensureChromeExtensionRelayServer(opts: {
           // ignore
         }
       })();
-      res.writeHead(200);
+      res.writeHead(200, corsHeaders);
       res.end("OK");
       return;
     }
@@ -481,7 +512,7 @@ export async function ensureChromeExtensionRelayServer(opts: {
     if (closeMatch && (req.method === "GET" || req.method === "PUT")) {
       const targetId = decodeURIComponent(closeMatch[1] ?? "").trim();
       if (!targetId) {
-        res.writeHead(400);
+        res.writeHead(400, corsHeaders);
         res.end("targetId required");
         return;
       }
@@ -496,12 +527,12 @@ export async function ensureChromeExtensionRelayServer(opts: {
           // ignore
         }
       })();
-      res.writeHead(200);
+      res.writeHead(200, corsHeaders);
       res.end("OK");
       return;
     }
 
-    res.writeHead(404);
+    res.writeHead(404, corsHeaders);
     res.end("not found");
   });
 
@@ -513,13 +544,20 @@ export async function ensureChromeExtensionRelayServer(opts: {
     const pathname = url.pathname;
     const remote = req.socket.remoteAddress;
 
-    if (!isLoopbackAddress(remote)) {
-      rejectUpgrade(socket, 403, "Forbidden");
+    // Allow remote connections only if explicitly enabled
+    if (!allowRemote && !isLoopbackAddress(remote)) {
+      rejectUpgrade(
+        socket,
+        403,
+        "Forbidden: remote connections not allowed. Set browser.relayAllowRemote=true to enable.",
+      );
       return;
     }
 
     const origin = headerValue(req.headers.origin);
-    if (origin && !origin.startsWith("chrome-extension://")) {
+    // When allowRemote is true, skip the chrome-extension origin check for /cdp connections
+    // (the extension itself always connects from chrome-extension://, but remote CDP clients won't have that origin)
+    if (pathname === "/extension" && origin && !origin.startsWith("chrome-extension://")) {
       rejectUpgrade(socket, 403, "Forbidden: invalid origin");
       return;
     }

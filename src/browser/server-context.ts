@@ -286,7 +286,10 @@ function createProfileContext(
 
     if (isExtension) {
       if (!httpReachable) {
-        await ensureChromeExtensionRelayServer({ cdpUrl: profile.cdpUrl });
+        await ensureChromeExtensionRelayServer({
+          cdpUrl: profile.cdpUrl,
+          allowRemote: current.resolved.relayAllowRemote,
+        });
         if (await isHttpReachable(1200)) {
           // continue: we still need the extension to connect for CDP websocket.
         } else {
