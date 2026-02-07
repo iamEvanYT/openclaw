@@ -372,7 +372,7 @@ export function formatAssistantErrorText(
   }
 
   if (isBillingErrorMessage(raw)) {
-    return BILLING_ERROR_USER_MESSAGE;
+    return raw;
   }
 
   if (isLikelyHttpErrorText(raw) || isRawApiErrorPayload(raw)) {
@@ -411,7 +411,7 @@ export function sanitizeUserFacingText(text: string): string {
   }
 
   if (isBillingErrorMessage(trimmed)) {
-    return BILLING_ERROR_USER_MESSAGE;
+    return trimmed;
   }
 
   if (isRawApiErrorPayload(trimmed) || isLikelyHttpErrorText(trimmed)) {
