@@ -449,6 +449,7 @@ export function formatAssistantErrorText(
   }
 
   if (isContextOverflowError(raw)) {
+    return raw;
     return (
       "Context overflow: prompt too large for the model. " +
       "Try /reset (or /new) to start a fresh session, or use a larger-context model."
