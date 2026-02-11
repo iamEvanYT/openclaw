@@ -152,7 +152,27 @@ describe("shouldRunMemoryFlush", () => {
 });
 
 describe("resolveMemoryFlushContextWindowTokens", () => {
-  it("falls back to agent config or default tokens", () => {
+  it("falls back to default when nothing is set", () => {
+    expect(resolveMemoryFlushContextWindowTokens({})).toBe(200_000);
+  });
+
+  it("uses agentCfgContextTokens when set", () => {
     expect(resolveMemoryFlushContextWindowTokens({ agentCfgContextTokens: 42_000 })).toBe(42_000);
+  });
+
+  it("uses agentCfgContextTokens even when larger than model default", () => {
+    // No model in cache, so model lookup returns undefined.
+    // agentCfgContextTokens is the user's explicit setting and should win.
+    expect(
+      resolveMemoryFlushContextWindowTokens({
+        modelId: "unknown-model",
+        agentCfgContextTokens: 300_000,
+      }),
+    ).toBe(300_000);
+  });
+
+  it("ignores non-positive agentCfgContextTokens", () => {
+    expect(resolveMemoryFlushContextWindowTokens({ agentCfgContextTokens: 0 })).toBe(200_000);
+    expect(resolveMemoryFlushContextWindowTokens({ agentCfgContextTokens: -1 })).toBe(200_000);
   });
 });

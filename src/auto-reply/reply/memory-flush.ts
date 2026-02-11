@@ -107,9 +107,16 @@ export function resolveMemoryFlushContextWindowTokens(params: {
   modelId?: string;
   agentCfgContextTokens?: number;
 }): number {
-  return (
-    lookupContextTokens(params.modelId) ?? params.agentCfgContextTokens ?? DEFAULT_CONTEXT_TOKENS
-  );
+  // agents.defaults.contextTokens is what applyContextWindowCap feeds to the
+  // SDK, so it determines when auto-compaction fires.  The memory-flush
+  // threshold must use the same value so the flush runs *before* the SDK
+  // compacts.  Only fall back to the model's native window (or the built-in
+  // default) when the user hasn't configured an explicit cap.
+  const explicit = params.agentCfgContextTokens;
+  if (explicit != null && explicit > 0) {
+    return explicit;
+  }
+  return lookupContextTokens(params.modelId) ?? DEFAULT_CONTEXT_TOKENS;
 }
 
 export function shouldRunMemoryFlush(params: {
