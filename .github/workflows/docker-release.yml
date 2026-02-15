@@ -76,8 +76,6 @@ jobs:
           context: .
           platforms: linux/amd64
           tags: ${{ steps.tags.outputs.value }}
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-cache:amd64
-          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-cache:amd64,mode=max
           provenance: false
           push: true
 
@@ -135,8 +133,6 @@ jobs:
           context: .
           platforms: linux/arm64
           tags: ${{ steps.tags.outputs.value }}
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-cache:arm64
-          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-cache:arm64,mode=max
           provenance: false
           push: true
 
