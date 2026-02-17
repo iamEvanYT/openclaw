@@ -2,6 +2,7 @@ import {
   abortEmbeddedPiRun,
   compactEmbeddedPiSession,
   isEmbeddedPiRunActive,
+  runEmbeddedPiAgent,
   waitForEmbeddedPiRunEnd,
 } from "../../agents/pi-embedded.js";
 import type { OpenClawConfig } from "../../config/config.js";
@@ -10,10 +11,12 @@ import {
   resolveSessionFilePath,
   resolveSessionFilePathOptions,
 } from "../../config/sessions.js";
+import { resolveSandboxConfigForAgent, resolveSandboxRuntimeStatus } from "../../agents/sandbox.js";
 import { logVerbose } from "../../globals.js";
 import { enqueueSystemEvent } from "../../infra/system-events.js";
 import { formatContextUsageShort, formatTokenCount } from "../status.js";
 import type { CommandHandler } from "./commands-types.js";
+import { resolveMemoryFlushSettings } from "./memory-flush.js";
 import { stripMentions, stripStructuralPrefixes } from "./mentions.js";
 import { incrementCompactionCount } from "./session-updates.js";
 
@@ -75,6 +78,54 @@ export const handleCompactCommand: CommandHandler = async (params) => {
     agentId: params.agentId,
     isGroup: params.isGroup,
   });
+
+  // Run memory flush before manual compaction if alwaysExecute is enabled
+  const memoryFlushSettings = resolveMemoryFlushSettings(params.cfg);
+  if (memoryFlushSettings?.alwaysExecute) {
+    // Check if workspace is writable (memory flush requires write access)
+    const memoryFlushWritable = (() => {
+      const runtime = resolveSandboxRuntimeStatus({
+        cfg: params.cfg,
+        sessionKey: params.sessionKey,
+      });
+      if (!runtime.sandboxed) {
+        return true;
+      }
+      const sandboxCfg = resolveSandboxConfigForAgent(params.cfg, runtime.agentId);
+      return sandboxCfg.workspaceAccess === "rw";
+    })();
+
+    if (memoryFlushWritable) {
+      try {
+        logVerbose("Running memory flush before manual /compact");
+        await runEmbeddedPiAgent({
+          sessionId,
+          sessionKey: params.sessionKey,
+          messageProvider: params.command.channel,
+          sessionFile: resolveSessionFilePath(sessionId, params.sessionEntry),
+          workspaceDir: params.workspaceDir,
+          config: params.cfg,
+          skillsSnapshot: params.sessionEntry.skillsSnapshot,
+          prompt: memoryFlushSettings.prompt,
+          extraSystemPrompt: memoryFlushSettings.systemPrompt,
+          ownerNumbers: params.command.ownerList.length > 0 ? params.command.ownerList : undefined,
+          provider: params.provider,
+          model: params.model,
+          thinkLevel: params.resolvedThinkLevel ?? (await params.resolveDefaultThinkingLevel()),
+          bashElevated: {
+            enabled: false,
+            allowed: false,
+            defaultLevel: "off",
+          },
+          timeoutMs: 120_000,
+          runId: crypto.randomUUID(),
+        });
+      } catch (err) {
+        logVerbose(`Memory flush before /compact failed: ${String(err)}`);
+      }
+    }
+  }
+
   const result = await compactEmbeddedPiSession({
     sessionId,
     sessionKey: params.sessionKey,

@@ -319,4 +319,6 @@ export type AgentCompactionMemoryFlushConfig = {
   prompt?: string;
   /** System prompt appended for the memory flush turn. */
   systemPrompt?: string;
+  /** Run memory flush before all compactions, including manual /compact (default: false). */
+  alwaysExecute?: boolean;
 };
