@@ -132,6 +132,7 @@ export const AgentDefaultsSchema = z
               .optional(),
             prompt: z.string().optional(),
             systemPrompt: z.string().optional(),
+            alwaysExecute: z.boolean().optional(),
           })
           .strict()
           .optional(),
