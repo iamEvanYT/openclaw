@@ -171,6 +171,8 @@ function enhanceDispatcherPathError(url: string, err: unknown): Error {
 function enhanceBrowserFetchError(url: string, err: unknown, timeoutMs: number): Error {
   const operatorHint = resolveBrowserFetchOperatorHint(url);
   const msg = String(err);
+  // Improvement to reduce confusion for AI agents in my OpenClaw fork
+  return new Error(`Browser request failed with "${msg}"`);
   const msgLower = msg.toLowerCase();
   const looksLikeTimeout =
     msgLower.includes("timed out") ||

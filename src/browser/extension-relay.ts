@@ -225,10 +225,14 @@ export function getChromeExtensionRelayAuthHeaders(url: string): Record<string, 
 export async function ensureChromeExtensionRelayServer(opts: {
   cdpUrl: string;
   bindHost?: string;
+  allowRemote?: boolean;
 }): Promise<ChromeExtensionRelayServer> {
   const info = parseBaseUrl(opts.cdpUrl);
-  if (!isLoopbackHost(info.host)) {
-    throw new Error(`extension relay requires loopback cdpUrl host (got ${info.host})`);
+  const allowRemote = opts.allowRemote === true;
+  if (!allowRemote && !isLoopbackHost(info.host)) {
+    throw new Error(
+      `extension relay requires loopback cdpUrl host (got ${info.host}). Set browser.relayAllowRemote=true to allow non-loopback hosts.`,
+    );
   }
   const bindHost = opts.bindHost ?? info.host;
 
@@ -693,15 +697,19 @@ export async function ensureChromeExtensionRelayServer(opts: {
       const pathname = url.pathname;
       const remote = req.socket.remoteAddress;
 
-      // When bindHost is explicitly non-loopback (e.g. 0.0.0.0 for WSL2),
-      // allow non-loopback connections; otherwise enforce loopback-only.
-      if (!isLoopbackAddress(remote) && isLoopbackHost(bindHost)) {
-        rejectUpgrade(socket, 403, "Forbidden");
+      // When bindHost is loopback, keep the default loopback-only policy unless
+      // remote relay access was explicitly enabled.
+      if (!allowRemote && !isLoopbackAddress(remote) && isLoopbackHost(bindHost)) {
+        rejectUpgrade(
+          socket,
+          403,
+          "Forbidden: remote connections not allowed. Set browser.relayAllowRemote=true to enable.",
+        );
         return;
       }
 
       const origin = headerValue(req.headers.origin);
-      if (origin && !origin.startsWith("chrome-extension://")) {
+      if (pathname === "/extension" && origin && !origin.startsWith("chrome-extension://")) {
         rejectUpgrade(socket, 403, "Forbidden: invalid origin");
         return;
       }

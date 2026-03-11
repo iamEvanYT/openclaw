@@ -340,6 +340,8 @@ export const OpenClawSchema = z
         attachOnly: z.boolean().optional(),
         cdpPortRangeStart: z.number().int().min(1).max(65535).optional(),
         defaultProfile: z.string().optional(),
+        relayHost: z.string().optional(),
+        relayAllowRemote: z.boolean().optional(),
         snapshotDefaults: BrowserSnapshotDefaultsSchema,
         ssrfPolicy: z
           .object({

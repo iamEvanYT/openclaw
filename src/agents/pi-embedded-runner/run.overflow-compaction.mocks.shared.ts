@@ -61,9 +61,13 @@ export const mockedContextEngine = {
 export const mockedContextEngineCompact = vi.mocked(mockedContextEngine.compact);
 export const mockedEnsureRuntimePluginsLoaded: (...args: unknown[]) => void = vi.fn();
 
-vi.mock("../../plugins/hook-runner-global.js", () => ({
-  getGlobalHookRunner: vi.fn(() => mockedGlobalHookRunner),
-}));
+vi.mock("../../plugins/hook-runner-global.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../plugins/hook-runner-global.js")>();
+  return {
+    ...actual,
+    getGlobalHookRunner: vi.fn(() => mockedGlobalHookRunner),
+  };
+});
 
 vi.mock("../../context-engine/index.js", () => ({
   ensureContextEnginesInitialized: vi.fn(),
@@ -172,27 +176,31 @@ vi.mock("../models-config.js", () => ({
   ensureOpenClawModelsJson: vi.fn(async () => {}),
 }));
 
-vi.mock("../context-window-guard.js", () => ({
-  CONTEXT_WINDOW_HARD_MIN_TOKENS: 1000,
-  CONTEXT_WINDOW_WARN_BELOW_TOKENS: 5000,
-  evaluateContextWindowGuard: vi.fn(() => ({
-    shouldWarn: false,
-    shouldBlock: false,
-    tokens: 200000,
-    source: "model",
-  })),
-  resolveContextWindowInfo: vi.fn(() => ({
-    tokens: 200000,
-    source: "model",
-  })),
-}));
+vi.mock("../context-window-guard.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../context-window-guard.js")>();
+  return {
+    ...actual,
+    CONTEXT_WINDOW_HARD_MIN_TOKENS: 1000,
+    CONTEXT_WINDOW_WARN_BELOW_TOKENS: 5000,
+    evaluateContextWindowGuard: vi.fn(() => ({
+      shouldWarn: false,
+      shouldBlock: false,
+      tokens: 200000,
+      source: "model",
+    })),
+    resolveContextWindowInfo: vi.fn(() => ({
+      tokens: 200000,
+      source: "model",
+    })),
+  };
+});
 
 vi.mock("../../process/command-queue.js", () => ({
   enqueueCommandInLane: vi.fn((_lane: string, task: () => unknown) => task()),
 }));
 
-vi.mock(import("../../utils/message-channel.js"), async (importOriginal) => {
-  const actual = await importOriginal();
+vi.mock("../../utils/message-channel.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../utils/message-channel.js")>();
   return {
     ...actual,
     isMarkdownCapableMessageChannel: vi.fn(() => true),

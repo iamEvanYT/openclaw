@@ -1,7 +1,8 @@
 import { loadConfig } from "../config/config.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
-import { resolveBrowserConfig } from "./config.js";
+import { resolveBrowserConfig, resolveProfile } from "./config.js";
 import { ensureBrowserControlAuth } from "./control-auth.js";
+import { ensureChromeExtensionRelayServer } from "./extension-relay.js";
 import { createBrowserRuntimeState, stopBrowserRuntime } from "./runtime-lifecycle.js";
 import { type BrowserServerState, createBrowserRouteContext } from "./server-context.js";
 
@@ -45,6 +46,21 @@ export async function startBrowserControlServiceFromConfig(): Promise<BrowserSer
     resolved,
     onWarn: (message) => logService.warn(message),
   });
+
+  // If any profile uses the Chrome extension relay, start the local relay server eagerly
+  // so the extension can connect before the first browser action.
+  for (const name of Object.keys(resolved.profiles)) {
+    const profile = resolveProfile(resolved, name);
+    if (!profile || profile.driver !== "extension") {
+      continue;
+    }
+    await ensureChromeExtensionRelayServer({
+      cdpUrl: profile.cdpUrl,
+      allowRemote: resolved.relayAllowRemote,
+    }).catch((err: unknown) => {
+      logService.warn(`Chrome extension relay init failed for profile "${name}": ${String(err)}`);
+    });
+  }
 
   logService.info(
     `Browser control service ready (profiles=${Object.keys(resolved.profiles).length})`,
