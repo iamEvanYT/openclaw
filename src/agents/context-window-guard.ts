@@ -54,6 +54,22 @@ export type ContextWindowGuardResult = ContextWindowInfo & {
   shouldBlock: boolean;
 };
 
+/**
+ * Apply the resolved context window cap to a model object.
+ * Returns a shallow copy with `contextWindow` set to the capped value
+ * if the resolved info is smaller than the model's native window.
+ */
+export function applyContextWindowCap<T extends { contextWindow?: number }>(
+  model: T,
+  info: ContextWindowInfo,
+): T {
+  const modelWindow = model.contextWindow ?? Infinity;
+  if (info.tokens < modelWindow) {
+    return { ...model, contextWindow: info.tokens };
+  }
+  return model;
+}
+
 export function evaluateContextWindowGuard(params: {
   info: ContextWindowInfo;
   warnBelowTokens?: number;
