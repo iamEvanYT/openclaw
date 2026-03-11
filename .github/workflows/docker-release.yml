@@ -19,12 +19,11 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   # Build amd64 images (default + slim share the build stage cache)
   build-amd64:
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     permissions:
       packages: write
       contents: read
@@ -45,11 +44,18 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Resolve image repository (amd64)
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "value=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
       - name: Resolve image tags (amd64)
         id: tags
         shell: bash
         env:
-          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          IMAGE: ${{ env.REGISTRY }}/${{ steps.image.outputs.value }}
         run: |
           set -euo pipefail
           tags=()
@@ -101,18 +107,17 @@ jobs:
 
       - name: Build and push amd64 image
         id: build
-        uses: useblacksmith/build-push-action@v2
+        uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64
           tags: ${{ steps.tags.outputs.value }}
-          labels: ${{ steps.labels.outputs.value }}
           provenance: false
           push: true
 
       - name: Build and push amd64 slim image
         id: build-slim
-        uses: useblacksmith/build-push-action@v2
+        uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64
@@ -125,7 +130,7 @@ jobs:
 
   # Build arm64 images (default + slim share the build stage cache)
   build-arm64:
-    runs-on: blacksmith-16vcpu-ubuntu-2404-arm
+    runs-on: ubuntu-24.04-arm
     permissions:
       packages: write
       contents: read
@@ -146,11 +151,18 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Resolve image repository (arm64)
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "value=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
       - name: Resolve image tags (arm64)
         id: tags
         shell: bash
         env:
-          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          IMAGE: ${{ env.REGISTRY }}/${{ steps.image.outputs.value }}
         run: |
           set -euo pipefail
           tags=()
@@ -202,18 +214,17 @@ jobs:
 
       - name: Build and push arm64 image
         id: build
-        uses: useblacksmith/build-push-action@v2
+        uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/arm64
           tags: ${{ steps.tags.outputs.value }}
-          labels: ${{ steps.labels.outputs.value }}
           provenance: false
           push: true
 
       - name: Build and push arm64 slim image
         id: build-slim
-        uses: useblacksmith/build-push-action@v2
+        uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/arm64
@@ -226,7 +237,7 @@ jobs:
 
   # Create multi-platform manifests
   create-manifest:
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     permissions:
       packages: write
       contents: read
@@ -242,11 +253,18 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Resolve image repository
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "value=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
       - name: Resolve manifest tags
         id: tags
         shell: bash
         env:
-          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          IMAGE: ${{ env.REGISTRY }}/${{ steps.image.outputs.value }}
         run: |
           set -euo pipefail
           tags=()
