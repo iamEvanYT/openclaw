@@ -26,7 +26,6 @@ concurrency:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   validate_manual_backfill:
@@ -94,11 +93,18 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Resolve image repository (amd64)
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "value=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
       - name: Resolve image tags (amd64)
         id: tags
         shell: bash
         env:
-          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          IMAGE: ${{ env.REGISTRY }}/${{ steps.image.outputs.value }}
           SOURCE_REF: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
         run: |
           set -euo pipefail
@@ -162,7 +168,6 @@ jobs:
           cache-from: type=gha,scope=docker-release-amd64
           cache-to: type=gha,mode=max,scope=docker-release-amd64
           tags: ${{ steps.tags.outputs.value }}
-          labels: ${{ steps.labels.outputs.value }}
           provenance: false
           push: true
 
@@ -211,11 +216,18 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Resolve image repository (arm64)
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "value=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
       - name: Resolve image tags (arm64)
         id: tags
         shell: bash
         env:
-          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          IMAGE: ${{ env.REGISTRY }}/${{ steps.image.outputs.value }}
           SOURCE_REF: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
         run: |
           set -euo pipefail
@@ -279,7 +291,6 @@ jobs:
           cache-from: type=gha,scope=docker-release-arm64
           cache-to: type=gha,mode=max,scope=docker-release-arm64
           tags: ${{ steps.tags.outputs.value }}
-          labels: ${{ steps.labels.outputs.value }}
           provenance: false
           push: true
 
@@ -322,11 +333,18 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Resolve image repository
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "value=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
       - name: Resolve manifest tags
         id: tags
         shell: bash
         env:
-          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          IMAGE: ${{ env.REGISTRY }}/${{ steps.image.outputs.value }}
           SOURCE_REF: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
           IS_MANUAL_BACKFILL: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
         run: |
