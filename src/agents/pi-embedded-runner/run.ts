@@ -23,6 +23,7 @@ import {
   resolveProfilesUnavailableReason,
 } from "../auth-profiles.js";
 import {
+  applyContextWindowCap,
   CONTEXT_WINDOW_HARD_MIN_TOKENS,
   CONTEXT_WINDOW_WARN_BELOW_TOKENS,
   evaluateContextWindowGuard,
@@ -395,12 +396,6 @@ export async function runEmbeddedPiAgent(
         modelContextWindow: runtimeModel.contextWindow,
         defaultTokens: DEFAULT_CONTEXT_TOKENS,
       });
-      // Apply contextTokens cap to model so pi-coding-agent's auto-compaction
-      // threshold uses the effective limit, not the native context window.
-      let effectiveModel =
-        ctxInfo.tokens < (runtimeModel.contextWindow ?? Infinity)
-          ? { ...runtimeModel, contextWindow: ctxInfo.tokens }
-          : runtimeModel;
       const ctxGuard = evaluateContextWindowGuard({
         info: ctxInfo,
         warnBelowTokens: CONTEXT_WINDOW_WARN_BELOW_TOKENS,
@@ -420,6 +415,10 @@ export async function runEmbeddedPiAgent(
           { reason: "unknown", provider, model: modelId },
         );
       }
+
+      // Apply context window cap from agents.defaults.contextTokens to the model
+      // so the SDK triggers compaction at the configured threshold
+      let effectiveModel = applyContextWindowCap(runtimeModel, ctxInfo);
 
       const authStore = ensureAuthProfileStore(agentDir, { allowKeychainPrompt: false });
       const preferredProfileId = params.authProfileId?.trim();
